@@ -1,7 +1,7 @@
 [gd_scene load_steps=13 format=3 uid="uid://b8wvxa3cyvnkj"]
 
 [ext_resource type="Script" path="res://scripts/car_controller.gd" id="1_car"]
-[ext_resource type="PackedScene" uid="uid://cqaiicocs1ita" path="res://assets/car.glb" id="2_glb"]
+[ext_resource type="PackedScene" uid="uid://82yictoxgupa" path="res://assets/vehicles/car.glb" id="2_glb"]
 [ext_resource type="Script" path="res://scripts/touch_ui.gd" id="3_ui"]
 [ext_resource type="Script" path="res://scripts/boxes_spawner.gd" id="4_boxes"]
 
