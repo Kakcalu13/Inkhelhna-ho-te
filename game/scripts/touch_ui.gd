@@ -98,8 +98,12 @@ func _process(_delta: float) -> void:
 	_was_shaking = boosting
 	# ---------------------------------------------------------------------------
 
-	# Active (orange) vs. disabled (grey) StyleBox swap
-	var available: bool = _car.boost_timer <= 0.0 and _car.cooldown_timer <= 0.0
+	# Active (orange) vs. disabled (grey) StyleBox swap.
+	# The buttons stay orange during the active 2-s boost (while shaking) so
+	# they look "fired up". They only turn grey AFTER the boost ends, while
+	# the cooldown timer is ticking — which is the period you actually can't
+	# re-trigger.
+	var available: bool = _car.cooldown_timer <= 0.0
 	if available == _last_boost_avail:
 		return
 	_last_boost_avail = available
