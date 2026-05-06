@@ -1,0 +1,313 @@
+[gd_scene load_steps=13 format=3 uid="uid://b8wvxa3cyvnkj"]
+
+[ext_resource type="Script" path="res://scripts/car_controller.gd" id="1_car"]
+[ext_resource type="PackedScene" uid="uid://cqaiicocs1ita" path="res://assets/car.glb" id="2_glb"]
+[ext_resource type="Script" path="res://scripts/touch_ui.gd" id="3_ui"]
+[ext_resource type="Script" path="res://scripts/boxes_spawner.gd" id="4_boxes"]
+
+[sub_resource type="ProceduralSkyMaterial" id="Sky_Mat"]
+sky_top_color = Color(0.36, 0.55, 0.85, 1)
+sky_horizon_color = Color(0.78, 0.85, 0.92, 1)
+ground_bottom_color = Color(0.18, 0.22, 0.18, 1)
+ground_horizon_color = Color(0.62, 0.65, 0.6, 1)
+
+[sub_resource type="Sky" id="Sky"]
+sky_material = SubResource("Sky_Mat")
+
+[sub_resource type="Environment" id="Env"]
+background_mode = 2
+sky = SubResource("Sky")
+ambient_light_source = 3
+ambient_light_color = Color(0.7, 0.78, 0.9, 1)
+ambient_light_energy = 0.4
+tonemap_mode = 3
+glow_enabled = true
+glow_intensity = 0.3
+fog_enabled = true
+fog_light_color = Color(0.65, 0.72, 0.82, 1)
+fog_density = 0.005
+
+[sub_resource type="StandardMaterial3D" id="Ground_Mat"]
+albedo_color = Color(0.28, 0.32, 0.3, 1)
+roughness = 0.85
+uv1_scale = Vector3(40, 40, 1)
+
+[sub_resource type="PlaneMesh" id="Plane_Mesh"]
+size = Vector2(400, 400)
+subdivide_width = 4
+subdivide_depth = 4
+
+[sub_resource type="BoxShape3D" id="Ground_Shape"]
+size = Vector3(400, 0.4, 400)
+
+[sub_resource type="BoxShape3D" id="Car_Body_Shape"]
+size = Vector3(1.9, 1.5, 4.4)
+
+[sub_resource type="StyleBoxFlat" id="Boost_Style"]
+bg_color = Color(0.95, 0.45, 0.1, 0.85)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(1, 0.78, 0.2, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[node name="World" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 12, 0)
+light_energy = 1.1
+shadow_enabled = true
+
+[node name="Ground" type="StaticBody3D" parent="."]
+
+[node name="GroundMesh" type="MeshInstance3D" parent="Ground"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.725, 0)
+material_override = SubResource("Ground_Mat")
+mesh = SubResource("Plane_Mesh")
+
+[node name="GroundShape" type="CollisionShape3D" parent="Ground"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.2, 0)
+shape = SubResource("Ground_Shape")
+
+[node name="Car" type="CharacterBody3D" parent="."]
+script = ExtResource("1_car")
+
+[node name="CarShape" type="CollisionShape3D" parent="Car"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
+shape = SubResource("Car_Body_Shape")
+
+[node name="CarModel" parent="Car" instance=ExtResource("2_glb")]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 0, 0, 0)
+
+[node name="Camera3D" type="Camera3D" parent="Car"]
+transform = Transform3D(1, 0, 0, 0, 0.965926, 0.258819, 0, -0.258819, 0.965926, 0, 3.5, 7.5)
+fov = 65.0
+
+[node name="Boxes" type="Node3D" parent="."]
+script = ExtResource("4_boxes")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="UI" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("3_ui")
+
+[node name="BtnUp" type="Panel" parent="HUD/UI"]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -260.0
+offset_top = -260.0
+offset_right = -130.0
+offset_bottom = -130.0
+grow_horizontal = 0
+grow_vertical = 0
+mouse_filter = 2
+
+[node name="LabelUp" type="Label" parent="HUD/UI/BtnUp"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -40.0
+offset_top = -40.0
+offset_right = 40.0
+offset_bottom = 40.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 64
+text = "↑"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="BtnDown" type="Panel" parent="HUD/UI"]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -260.0
+offset_top = -125.0
+offset_right = -130.0
+offset_bottom = 5.0
+grow_horizontal = 0
+grow_vertical = 0
+mouse_filter = 2
+
+[node name="LabelDown" type="Label" parent="HUD/UI/BtnDown"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -40.0
+offset_top = -40.0
+offset_right = 40.0
+offset_bottom = 40.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 64
+text = "↓"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="BtnLeft" type="Panel" parent="HUD/UI"]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 60.0
+offset_top = -190.0
+offset_right = 190.0
+offset_bottom = -60.0
+grow_vertical = 0
+mouse_filter = 2
+
+[node name="LabelLeft" type="Label" parent="HUD/UI/BtnLeft"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -40.0
+offset_top = -40.0
+offset_right = 40.0
+offset_bottom = 40.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 64
+text = "←"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="BtnRight" type="Panel" parent="HUD/UI"]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 200.0
+offset_top = -190.0
+offset_right = 330.0
+offset_bottom = -60.0
+grow_vertical = 0
+mouse_filter = 2
+
+[node name="LabelRight" type="Label" parent="HUD/UI/BtnRight"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -40.0
+offset_top = -40.0
+offset_right = 40.0
+offset_bottom = 40.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 64
+text = "→"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="BtnBoostLeft" type="Panel" parent="HUD/UI"]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 60.0
+offset_top = -310.0
+offset_right = 330.0
+offset_bottom = -210.0
+grow_vertical = 0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("Boost_Style")
+
+[node name="LabelBoostLeft" type="Label" parent="HUD/UI/BtnBoostLeft"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -100.0
+offset_top = -30.0
+offset_right = 100.0
+offset_bottom = 30.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 40
+text = "⚡ BOOST"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="BtnBoostRight" type="Panel" parent="HUD/UI"]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -330.0
+offset_top = -395.0
+offset_right = -60.0
+offset_bottom = -270.0
+grow_horizontal = 0
+grow_vertical = 0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("Boost_Style")
+
+[node name="LabelBoostRight" type="Label" parent="HUD/UI/BtnBoostRight"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -100.0
+offset_top = -30.0
+offset_right = 100.0
+offset_bottom = 30.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 40
+text = "⚡ BOOST"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Hint" type="Label" parent="HUD/UI"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -240.0
+offset_top = 24.0
+offset_right = 240.0
+offset_bottom = 64.0
+grow_horizontal = 2
+theme_override_font_sizes/font_size = 22
+text = "Arrow keys or on-screen buttons to drive"
+horizontal_alignment = 1
