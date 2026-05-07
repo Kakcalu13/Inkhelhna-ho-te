@@ -54,6 +54,9 @@ var anim_player: AnimationPlayer = null
 
 
 func _ready() -> void:
+	# Make ourselves discoverable to humans / NPCs that want to react to the player
+	add_to_group("player_vehicles")
+
 	anim_player = car_model.find_child("AnimationPlayer", true, false)
 	if anim_player and anim_player.has_animation("Drive"):
 		anim_player.play("Drive")
