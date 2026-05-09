@@ -16,6 +16,10 @@ config/features=PackedStringArray("4.3", "Mobile")
 boot_splash/image="res://assets/splash_logo.png"
 config/icon="res://icon.svg"
 
+[autoload]
+
+BubbleRegistry="*res://scripts/bubble_registry.gd"
+
 [display]
 
 window/size/viewport_width=1920

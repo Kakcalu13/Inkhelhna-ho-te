@@ -1,0 +1,13 @@
+[gd_scene load_steps=2 format=3 uid="uid://b8wbubblefx1"]
+
+[ext_resource type="Script" path="res://scripts/bubble.gd" id="1_script"]
+
+[node name="Bubble" type="Sprite3D"]
+billboard = 1
+alpha_cut = 1
+shaded = false
+double_sided = true
+transparent = true
+fixed_size = false
+pixel_size = 0.01
+script = ExtResource("1_script")

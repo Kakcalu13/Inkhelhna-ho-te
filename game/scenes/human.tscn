@@ -1,0 +1,32 @@
+[gd_scene load_steps=5 format=3 uid="uid://b8whuman0001"]
+
+[ext_resource type="Script" path="res://scripts/human.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://btk2dyfmeo33i" path="res://assets/humans/female_5.glb" id="2_model"]
+
+[sub_resource type="CapsuleShape3D" id="Human_Capsule"]
+radius = 0.32
+height = 1.7
+
+[sub_resource type="CapsuleShape3D" id="Hit_Capsule"]
+radius = 0.45
+height = 1.7
+
+[node name="Human" type="CharacterBody3D"]
+script = ExtResource("1_script")
+
+[node name="HumanShape" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)
+shape = SubResource("Human_Capsule")
+
+[node name="Model" parent="." instance=ExtResource("2_model")]
+
+[node name="HitArea" type="Area3D" parent="."]
+collision_layer = 0
+monitorable = false
+
+[node name="HitShape" type="CollisionShape3D" parent="HitArea"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)
+shape = SubResource("Hit_Capsule")
+
+[node name="VisibleOnScreenNotifier3D" type="VisibleOnScreenNotifier3D" parent="."]
+aabb = AABB(-0.5, 0, -0.5, 1, 2, 1)

@@ -1,9 +1,12 @@
-[gd_scene load_steps=13 format=3 uid="uid://b8wvxa3cyvnkj"]
+[gd_scene load_steps=17 format=3 uid="uid://b8wvxa3cyvnkj"]
 
 [ext_resource type="Script" path="res://scripts/car_controller.gd" id="1_car"]
-[ext_resource type="PackedScene" uid="uid://cqaiicocs1ita" path="res://assets/car.glb" id="2_glb"]
+[ext_resource type="PackedScene" uid="uid://82yictoxgupa" path="res://assets/vehicles/car.glb" id="2_glb"]
 [ext_resource type="Script" path="res://scripts/touch_ui.gd" id="3_ui"]
 [ext_resource type="Script" path="res://scripts/boxes_spawner.gd" id="4_boxes"]
+[ext_resource type="PackedScene" uid="uid://b8whuman0001" path="res://scenes/human.tscn" id="5_human"]
+[ext_resource type="PackedScene" uid="uid://sxrdvxp8c841" path="res://scenes/golden_human.tscn" id="6_golden"]
+[ext_resource type="Texture2D" uid="uid://h56cj80vald0" path="res://assets/controller.png" id="7_controller"]
 
 [sub_resource type="ProceduralSkyMaterial" id="Sky_Mat"]
 sky_top_color = Color(0.36, 0.55, 0.85, 1)
@@ -43,6 +46,13 @@ size = Vector3(400, 0.4, 400)
 [sub_resource type="BoxShape3D" id="Car_Body_Shape"]
 size = Vector3(1.9, 1.5, 4.4)
 
+[sub_resource type="StyleBoxFlat" id="Stick_Style"]
+bg_color = Color(0.42, 0.42, 0.42, 0.78)
+corner_radius_top_left = 35
+corner_radius_top_right = 35
+corner_radius_bottom_right = 35
+corner_radius_bottom_left = 35
+
 [sub_resource type="StyleBoxFlat" id="Boost_Style"]
 bg_color = Color(0.95, 0.45, 0.1, 0.85)
 border_width_left = 3
@@ -68,7 +78,6 @@ shadow_enabled = true
 [node name="Ground" type="StaticBody3D" parent="."]
 
 [node name="GroundMesh" type="MeshInstance3D" parent="Ground"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.725, 0)
 material_override = SubResource("Ground_Mat")
 mesh = SubResource("Plane_Mesh")
 
@@ -93,6 +102,14 @@ fov = 65.0
 [node name="Boxes" type="Node3D" parent="."]
 script = ExtResource("4_boxes")
 
+[node name="Humans" type="Node3D" parent="."]
+
+[node name="Human" parent="Humans" instance=ExtResource("5_human")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 0, 0)
+
+[node name="GoldenHuman" parent="Humans" instance=ExtResource("6_golden")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12, 0, 0)
+
 [node name="HUD" type="CanvasLayer" parent="."]
 
 [node name="UI" type="Control" parent="HUD"]
@@ -105,141 +122,43 @@ grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("3_ui")
 
-[node name="BtnUp" type="Panel" parent="HUD/UI"]
+[node name="JoystickBase" type="TextureRect" parent="HUD/UI"]
 layout_mode = 1
-anchors_preset = 3
-anchor_left = 1.0
+anchors_preset = 7
+anchor_left = 0.5
 anchor_top = 1.0
-anchor_right = 1.0
+anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -260.0
+offset_left = -110.0
 offset_top = -260.0
-offset_right = -130.0
-offset_bottom = -130.0
-grow_horizontal = 0
+offset_right = 110.0
+offset_bottom = -40.0
+grow_horizontal = 2
 grow_vertical = 0
 mouse_filter = 2
+texture = ExtResource("7_controller")
+expand_mode = 1
+stretch_mode = 5
 
-[node name="LabelUp" type="Label" parent="HUD/UI/BtnUp"]
-layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -40.0
-offset_top = -40.0
-offset_right = 40.0
-offset_bottom = 40.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_font_sizes/font_size = 64
-text = "↑"
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="BtnDown" type="Panel" parent="HUD/UI"]
-layout_mode = 1
-anchors_preset = 3
-anchor_left = 1.0
-anchor_top = 1.0
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = -260.0
-offset_top = -125.0
-offset_right = -130.0
-offset_bottom = 5.0
-grow_horizontal = 0
-grow_vertical = 0
+[node name="Stick" type="Panel" parent="HUD/UI/JoystickBase"]
+visible = false
+layout_mode = 0
+offset_left = 75.0
+offset_top = 75.0
+offset_right = 145.0
+offset_bottom = 145.0
 mouse_filter = 2
-
-[node name="LabelDown" type="Label" parent="HUD/UI/BtnDown"]
-layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -40.0
-offset_top = -40.0
-offset_right = 40.0
-offset_bottom = 40.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_font_sizes/font_size = 64
-text = "↓"
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="BtnLeft" type="Panel" parent="HUD/UI"]
-layout_mode = 1
-anchors_preset = 2
-anchor_top = 1.0
-anchor_bottom = 1.0
-offset_left = 60.0
-offset_top = -190.0
-offset_right = 190.0
-offset_bottom = -60.0
-grow_vertical = 0
-mouse_filter = 2
-
-[node name="LabelLeft" type="Label" parent="HUD/UI/BtnLeft"]
-layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -40.0
-offset_top = -40.0
-offset_right = 40.0
-offset_bottom = 40.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_font_sizes/font_size = 64
-text = "←"
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="BtnRight" type="Panel" parent="HUD/UI"]
-layout_mode = 1
-anchors_preset = 2
-anchor_top = 1.0
-anchor_bottom = 1.0
-offset_left = 200.0
-offset_top = -190.0
-offset_right = 330.0
-offset_bottom = -60.0
-grow_vertical = 0
-mouse_filter = 2
-
-[node name="LabelRight" type="Label" parent="HUD/UI/BtnRight"]
-layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -40.0
-offset_top = -40.0
-offset_right = 40.0
-offset_bottom = 40.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_font_sizes/font_size = 64
-text = "→"
-horizontal_alignment = 1
-vertical_alignment = 1
+theme_override_styles/panel = SubResource("Stick_Style")
 
 [node name="BtnBoostLeft" type="Panel" parent="HUD/UI"]
 layout_mode = 1
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
-offset_left = 60.0
-offset_top = -310.0
-offset_right = 330.0
-offset_bottom = -210.0
+offset_left = 40.0
+offset_top = -390.0
+offset_right = 310.0
+offset_bottom = -290.0
 grow_vertical = 0
 mouse_filter = 2
 theme_override_styles/panel = SubResource("Boost_Style")
@@ -309,5 +228,5 @@ offset_right = 240.0
 offset_bottom = 64.0
 grow_horizontal = 2
 theme_override_font_sizes/font_size = 22
-text = "Arrow keys or on-screen buttons to drive"
+text = "Arrow keys or drag the joystick to drive"
 horizontal_alignment = 1

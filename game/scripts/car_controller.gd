@@ -27,20 +27,47 @@ extends CharacterBody3D
 @export var normal_push_factor: float = 0.60
 @export var boost_push_factor: float = 2.0
 
+# Where the BAM sprite spawns when the car hits a box, in the car's LOCAL
+# frame. Default (0, 3, 0) puts it 3 m above the chassis. Once spawned the
+# sprite is parented to the world, so it stays in that world spot — it does
+# not follow the car around.
+@export var bam_offset: Vector3 = Vector3(0.0, 5.0, 0.0)
+
+# Gravity so the car falls back down whenever a box pushes it up an inclined
+# surface. Higher value = snappier "snap to ground" after any contact bump.
+@export var gravity: float = 80.0
+
 var speed: float = 0.0
 var steer_angle: float = 0.0
 var boost_timer: float = 0.0          # > 0 while currently boosting
 var cooldown_timer: float = 0.0       # > 0 while waiting before next boost is allowed
+
+# Track which RigidBody3Ds we were in contact with last physics frame, so we
+# only spawn one BAM sprite per *new* contact (not every frame of continuous
+# touching).
+var _last_contacts: Array = []
+
+const BAM_SCENE: PackedScene = preload("res://scenes/bam_effect.tscn")
 
 @onready var car_model: Node3D = $CarModel
 var anim_player: AnimationPlayer = null
 
 
 func _ready() -> void:
+	# Make ourselves discoverable to humans / NPCs that want to react to the player
+	add_to_group("player_vehicles")
+
 	anim_player = car_model.find_child("AnimationPlayer", true, false)
 	if anim_player and anim_player.has_animation("Drive"):
 		anim_player.play("Drive")
 		anim_player.speed_scale = 0.0
+
+	# Treat any surface steeper than ~15° as a wall instead of a climbable slope.
+	# Box edges / tilted boxes are well above 15°, so the car stops and slides
+	# along them instead of riding up onto them like a ramp.
+	floor_max_angle = deg_to_rad(15.0)
+	# When pressed against a wall, slide along it — don't try to climb.
+	floor_block_on_wall = true
 
 
 func _physics_process(delta: float) -> void:
@@ -87,10 +114,28 @@ func _physics_process(delta: float) -> void:
 	if absf(speed) > 0.05:
 		rotate_y(steer_angle * (speed / max_speed) * turn_speed * delta)
 
-	# Drive forward (Car's local -Z) and let CharacterBody3D resolve collisions
+	# Drive forward (Car's local -Z) and let CharacterBody3D resolve collisions.
+	# Force the horizontal motion to stay strictly in the XZ plane (forward.y
+	# could pick up a tiny non-zero from accumulated rotation drift), then let
+	# gravity drive Y. Without this, sliding up a tilted box surface keeps the
+	# car suspended in mid-air after the impact.
 	var forward := -global_transform.basis.z
-	velocity = forward * speed
+	var prev_y_velocity: float = velocity.y
+	velocity.x = forward.x * speed
+	velocity.z = forward.z * speed
+	if is_on_floor():
+		# Small constant downward velocity keeps is_on_floor() true on flat ground
+		velocity.y = -2.0
+	else:
+		velocity.y = prev_y_velocity - gravity * delta
+	# Don't let collisions launch us upward — clamp positive Y motion before
+	# the slide so the algorithm can never give us a free kick into the air.
+	velocity.y = minf(velocity.y, 0.0)
 	move_and_slide()
+	# Same clamp after the slide: if a tilted-box impact rotated our velocity
+	# upward, kill it so it can't carry into the next physics tick.
+	if velocity.y > 0.0:
+		velocity.y = 0.0
 
 	# Push any RigidBody3D we hit. Apply impulse at the contact point so the
 	# box gets both linear push and a torque (so it tumbles when hit at a corner).
@@ -99,11 +144,14 @@ func _physics_process(delta: float) -> void:
 	# gains roughly `speed * factor` m/s per frame of contact regardless of its
 	# own mass (heavier boxes need more impulse for the same delta-v).
 	var push_factor: float = boost_push_factor if boosting else normal_push_factor
+	var current_contacts: Array = []
 	for i in range(get_slide_collision_count()):
 		var col: KinematicCollision3D = get_slide_collision(i)
 		var rb: RigidBody3D = col.get_collider() as RigidBody3D
 		if rb == null:
 			continue
+		current_contacts.append(rb)
+
 		var push_dir: Vector3 = -col.get_normal()
 		var contact_offset: Vector3 = col.get_position() - rb.global_position
 		var impulse_mag: float = absf(speed) * rb.mass * push_factor
@@ -113,9 +161,15 @@ func _physics_process(delta: float) -> void:
 		if rb.has_method("on_hit"):
 			var pulse_speed: float = 4.0 if boosting else 1.0
 			rb.call("on_hit", pulse_speed)
+		# If this is a *new* contact (we weren't touching this body last frame)
+		# spawn a world-pinned BAM sprite ABOVE THE CAR. The sprite stays at
+		# the world spot we put it; it does not follow the car after spawn.
+		if not _last_contacts.has(rb):
+			_spawn_bam(global_position + bam_offset)
 		# Tiny speed scrub on contact (3% per frame) so we still feel the
 		# impact without slamming to a stop on every box.
 		speed *= 0.97
+	_last_contacts = current_contacts
 
 	# After collision resolution, sync our scalar speed with the actual forward
 	# component of velocity so that ramming a wall scrubs off speed instead of
@@ -125,3 +179,16 @@ func _physics_process(delta: float) -> void:
 	# Drive the wheel-spin animation proportional to ground speed
 	if anim_player:
 		anim_player.speed_scale = (speed / max_speed) * wheel_anim_scale
+
+
+# Instantiate a BAM sprite at the given world position and parent it to the
+# World node so it stays anchored even after the car/box move away.
+func _spawn_bam(world_pos: Vector3) -> void:
+	var bam: Node3D = BAM_SCENE.instantiate()
+	# Parent to whatever node the Car sits under (the World root) so the
+	# sprite is a sibling of the car, not its child.
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		parent_node = get_tree().current_scene
+	parent_node.add_child(bam)
+	bam.global_position = world_pos

@@ -1,0 +1,12 @@
+[gd_scene load_steps=3 format=3 uid="uid://b8wbamfx0eff1"]
+
+[ext_resource type="Texture2D" uid="uid://bhvxuk5o0nlhx" path="res://assets/images/bam.png" id="1_tex"]
+[ext_resource type="Script" path="res://scripts/bam_effect.gd" id="2_script"]
+
+[node name="BamEffect" type="Sprite3D"]
+billboard = 1
+alpha_cut = 1
+texture = ExtResource("1_tex")
+script = ExtResource("2_script")
+normal_scale = Vector3(0.35, 0.35, 0.35)
+pop_in_duration = 0.4
