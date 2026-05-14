@@ -35,6 +35,7 @@ enum State { IDLE_WALK, FLEE, POINT, FALLEN }
 @export var meet_duration: float = 2.5
 @export var meet_cooldown: float = 5.0
 @export var meet_bubble_offset: Vector3 = Vector3(0.0, 2.4, 0.0)
+@export var line_duration: float = 2.5
 
 # Language pool. GoldenHuman picks RANDOMLY from any registered bubble whose
 # filename ends with this suffix. Drop new "_mz" images into assets/images/
@@ -57,6 +58,12 @@ enum State { IDLE_WALK, FLEE, POINT, FALLEN }
 @export var gold_roughness: float = 0.18
 @export var gold_emission_strength: float = 0.0   # 0 = no glow, bump for radiant gold
 
+# Gender — Golden picks one randomly on _ready by default. Disable by
+# unticking `random_gender_at_spawn` and the explicit `gender` value below
+# will be used as-is.
+@export var gender: String = "female"
+@export var random_gender_at_spawn: bool = true
+
 var state: State = State.IDLE_WALK
 var spawn_position: Vector3
 var wander_target: Vector3
@@ -74,6 +81,14 @@ var meet_timer: float = 0.0
 var meet_cooldown_timer: float = 0.0
 var meet_target: Node3D = null
 
+# Conversation playback (mirror of the same fields on Human; both copies
+# advance through the same line list in lockstep).
+var _conv_lines: Array = []
+var _conv_index: int = 0
+var _conv_line_timer: float = 0.0
+var _conv_partner: Node3D = null
+var _conv_is_initiator: bool = false
+
 var car: Node3D = null
 var is_in_camera: bool = false
 
@@ -81,11 +96,16 @@ var is_in_camera: bool = false
 @onready var notifier: VisibleOnScreenNotifier3D = $VisibleOnScreenNotifier3D
 @onready var hit_area: Area3D = $HitArea
 @onready var forward_ray: RayCast3D = $ForwardRay
+@onready var subtitle: Label3D = $Subtitle
 
 
 func _ready() -> void:
 	add_to_group("humans")
 	add_to_group("golden_humans")
+
+	if random_gender_at_spawn:
+		gender = "female" if randi() % 2 == 0 else "male"
+
 	spawn_position = global_position
 	wander_target = _pick_wander_target()
 
@@ -119,7 +139,6 @@ func _physics_process(delta: float) -> void:
 
 	# Meet-another-human takes precedence over jump / smart flee / wander.
 	if meet_timer > 0.0:
-		meet_timer -= delta
 		velocity.x = 0.0
 		velocity.z = 0.0
 		if meet_target != null and is_instance_valid(meet_target):
@@ -128,9 +147,26 @@ func _physics_process(delta: float) -> void:
 			if to_other.length() > 0.001:
 				_face_direction(to_other.normalized())
 		_play("Point")
-		if meet_timer <= 0.0:
-			meet_cooldown_timer = meet_cooldown
-			meet_target = null
+
+		if not _conv_lines.is_empty():
+			_conv_line_timer -= delta
+			if _conv_line_timer <= 0.0:
+				_conv_index += 1
+				if _conv_index >= _conv_lines.size():
+					_end_meet()
+					_apply_gravity(delta)
+					move_and_slide()
+					return
+				_conv_line_timer = line_duration
+				_update_subtitle_for_current_line()
+		else:
+			meet_timer -= delta
+			if meet_timer <= 0.0:
+				_end_meet()
+				_apply_gravity(delta)
+				move_and_slide()
+				return
+
 		_apply_gravity(delta)
 		move_and_slide()
 		return
@@ -171,20 +207,144 @@ func _check_meet_collisions() -> void:
 		if other == self or other == null:
 			continue
 		if other is Human or other is GoldenHuman:
+			# Don't try to chat up someone who's already on the ground or
+			# already busy in another conversation.
+			if other.has_method("is_fallen") and other.is_fallen():
+				continue
+			if other.has_method("is_in_meet") and other.is_in_meet():
+				continue
 			_on_meet_other(other as Node3D)
 			return
 
 
+func is_fallen() -> bool:
+	return state == State.FALLEN
+
+
+func is_in_meet() -> bool:
+	return meet_timer > 0.0
+
+
 func _on_meet_other(other: Node3D) -> void:
-	meet_timer = meet_duration
-	meet_target = other
-	# Bypass the normal bubble cooldown — this is a one-off event bubble.
-	var tex: Texture2D = _pick_pool_texture()
-	if tex == null:
+	if meet_timer > 0.0 or meet_cooldown_timer > 0.0:
 		return
-	var BubbleScript: GDScript = load("res://scripts/bubble.gd")
-	BubbleScript.spawn(get_parent(),
-			global_position + meet_bubble_offset, tex, bubble_scale)
+
+	# Initiator selection:
+	#  - Golden ↔ Golden  : lower instance_id is initiator.
+	#  - Golden ↔ Human   : Golden is ALWAYS the initiator. This way the
+	#    cross-language JSON's even-indexed lines (Mizo) come out as
+	#    Golden's subtitle, odd-indexed (English) as Human's.
+	var im_initiator: bool
+	if other is Human:
+		im_initiator = true
+	else:
+		im_initiator = get_instance_id() < other.get_instance_id()
+	if not im_initiator:
+		return
+
+	var other_gender: String = "female"
+	if "gender" in other:
+		other_gender = String(other.get("gender"))
+
+	# Pick the language pool by who we're meeting:
+	#   Golden ↔ Golden       -> "mizo"
+	#   Golden ↔ regular Human-> "mixed"  (regular Human says English lines,
+	#                                      Golden says Mizo lines — author the
+	#                                      JSON with that mix when the file
+	#                                      exists; falls back to bubble if not)
+	var language: String = "mizo" if other is GoldenHuman else "mixed"
+
+	var lines: Array = []
+	var cm: Node = get_node_or_null("/root/ConversationManager")
+	if cm != null:
+		lines = cm.call("pick_random", gender, other_gender, language)
+
+	_enter_meet(other, true, lines)
+	if other.has_method("_enter_meet"):
+		other._enter_meet(self, false, lines)
+
+
+func _enter_meet(partner: Node3D, is_initiator: bool, lines: Array) -> void:
+	meet_target = partner
+	_conv_partner = partner
+	_conv_is_initiator = is_initiator
+	_conv_lines = lines
+	_conv_index = 0
+	_conv_line_timer = line_duration
+
+	if lines.is_empty():
+		meet_timer = meet_duration
+		var tex: Texture2D = _pick_pool_texture()
+		if tex != null:
+			var BubbleScript: GDScript = load("res://scripts/bubble.gd")
+			BubbleScript.spawn(get_parent(),
+					global_position + meet_bubble_offset, tex, bubble_scale)
+	else:
+		meet_timer = INF
+		_update_subtitle_for_current_line()
+
+
+func _update_subtitle_for_current_line() -> void:
+	if _conv_lines.is_empty() or _conv_index >= _conv_lines.size():
+		_hide_subtitle()
+		return
+	var line: Dictionary = _conv_lines[_conv_index]
+	var line_speaker: String = String(line.get("speaker", ""))
+	var partner_gender: String = "female"
+	if _conv_partner != null and is_instance_valid(_conv_partner) and "gender" in _conv_partner:
+		partner_gender = String(_conv_partner.get("gender"))
+
+	# Normalize the speaker tag — the Mizo files occasionally contain
+	# "femalefemalefemale" instead of "female". begins_with is safe since
+	# "female" and "male" don't share a prefix.
+	var ls_lower: String = line_speaker.to_lower()
+	var speaker_norm: String = ls_lower
+	if ls_lower.begins_with("female"):
+		speaker_norm = "female"
+	elif ls_lower.begins_with("male"):
+		speaker_norm = "male"
+
+	# Cross-class meet (Golden ↔ regular Human) ignores the speaker tag
+	# (the cross-language JSON tags all lines "male") and alternates by
+	# index instead — Golden = even (Mizo), Human = odd (English).
+	var cross_class: bool = (_conv_partner is Human) and not (_conv_partner is GoldenHuman)
+
+	var show_for_me: bool = false
+	if not cross_class and gender != partner_gender:
+		show_for_me = (speaker_norm == gender)
+	else:
+		var even: bool = (_conv_index % 2 == 0)
+		show_for_me = (_conv_is_initiator and even) or (not _conv_is_initiator and not even)
+
+	if show_for_me:
+		_show_subtitle(String(line.get("text", "")))
+	else:
+		_hide_subtitle()
+
+
+func _show_subtitle(text: String) -> void:
+	if subtitle == null:
+		return
+	subtitle.text = text
+	subtitle.modulate = Color(1, 1, 1, 1)
+
+
+func _hide_subtitle() -> void:
+	if subtitle == null:
+		return
+	subtitle.text = ""
+	subtitle.modulate = Color(1, 1, 1, 0)
+
+
+func _end_meet() -> void:
+	_conv_lines = []
+	_conv_index = 0
+	_conv_partner = null
+	_conv_is_initiator = false
+	_hide_subtitle()
+	meet_timer = 0.0
+	meet_cooldown_timer = meet_cooldown
+	meet_target = null
 
 
 func _apply_gravity(delta: float) -> void:
@@ -415,9 +575,12 @@ func _on_hit_area_body_entered(body: Node) -> void:
 
 func _fall() -> void:
 	state = State.FALLEN
-	# Cancel any in-progress meet so the fallen pose isn't fighting with Point
-	meet_timer = 0.0
-	meet_target = null
+	# Clean up any in-progress meet/conversation on both sides.
+	if not _conv_lines.is_empty():
+		if _conv_partner != null and is_instance_valid(_conv_partner) \
+				and _conv_partner.has_method("_end_meet"):
+			_conv_partner._end_meet()
+	_end_meet()
 	_play("Fall")
 
 
