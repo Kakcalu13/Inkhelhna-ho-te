@@ -33,11 +33,26 @@ enum State { IDLE_WALK, FLEE, POINT, FALLEN }
 @export var gravity: float = 25.0
 @export var hit_velocity_threshold: float = 1.5
 
-# When two humans bump, they pause, face each other, play Point, and pop a
-# greeting bubble.
+# Gender — used by ConversationManager to look up which conversation file to
+# play when this human meets another. "female" or "male" are the values that
+# match the JSON filenames; default is "female".
+@export var gender: String = "female"
+
+# When two humans bump, they pause, face each other, play Point, and play
+# back a randomly-selected conversation from the matching gender-pair JSON.
+# meet_cooldown gates re-triggers so they don't loop while still touching.
 @export var meet_duration: float = 2.5
 @export var meet_cooldown: float = 5.0
 @export var meet_bubble_offset: Vector3 = Vector3(0.0, 2.4, 0.0)
+# Each conversation line stays on screen for this many seconds. Total meet
+# duration with a conversation = line_duration × line_count.
+@export var line_duration: float = 2.5
+# A conversation is only abandoned mid-line when the car gets THIS close
+# while moving — independent of the normal flee_distance, so people don't
+# flinch the moment a car drives by, but they DO scatter if it nearly hits
+# them. Keep this smaller than flee_distance for the "let it get closer
+# during a chat" feel.
+@export var conversation_break_distance: float = 3.5
 
 # Language pool. Regular Human picks RANDOMLY from any bubble in the registry
 # whose filename does NOT end with this suffix. New non-_mz images you drop
@@ -45,10 +60,12 @@ enum State { IDLE_WALK, FLEE, POINT, FALLEN }
 # the regular human to consider every bubble, including Mizo ones.
 @export var avoid_bubble_suffix: String = "_mz"
 
-# Specific bubble name for the FLEE state — the human always shouts the same
-# thing when running from the car. Leave blank to fall back to a random pick
-# from the language pool. Other states (point/meet) still pick from the pool.
+# Specific bubble name per reaction. Leave any of these blank to fall back
+# to a random pick from the language pool.
+#   FLEE  -> "oh_no!"  (running from car)
+#   POINT -> "wow!"    (idle car nearby, facing the human)
 @export var flee_bubble_name: String = "oh_no"
+@export var point_bubble_name: String = "wow"
 
 var state: State = State.IDLE_WALK
 var spawn_position: Vector3
@@ -61,12 +78,24 @@ var meet_timer: float = 0.0
 var meet_cooldown_timer: float = 0.0
 var meet_target: Node3D = null
 
+# Conversation playback state. Both partners run their own copies of these
+# (with the same lines + same line_duration) so they advance in lockstep
+# without needing per-frame syncing. _conv_is_initiator marks who started
+# the meet — used to decide who speaks the even/odd lines for same-gender
+# conversations (where the JSON's "speaker" field can't disambiguate).
+var _conv_lines: Array = []
+var _conv_index: int = 0
+var _conv_line_timer: float = 0.0
+var _conv_partner: Node3D = null
+var _conv_is_initiator: bool = false
+
 var car: Node3D = null
 var is_in_camera: bool = false
 
 @onready var anim_player: AnimationPlayer = find_child("AnimationPlayer", true, false)
 @onready var notifier: VisibleOnScreenNotifier3D = $VisibleOnScreenNotifier3D
 @onready var hit_area: Area3D = $HitArea
+@onready var subtitle: Label3D = $Subtitle
 
 
 func _ready() -> void:
@@ -105,22 +134,52 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		return
 
-	# Meet-another-human takes precedence: stop, face the other, hold Point.
+	# Meet-another-human takes precedence: stop, face the other, play
+	# through any active conversation, and hold Point. EXCEPT: if the car
+	# is now barreling toward us, abort the conversation immediately on
+	# both sides and fall through to the normal AI loop, which will pick
+	# FLEE on the next state decision.
 	if meet_timer > 0.0:
-		meet_timer -= delta
-		velocity.x = 0.0
-		velocity.z = 0.0
-		if meet_target != null and is_instance_valid(meet_target):
-			var to_other: Vector3 = meet_target.global_position - global_position
-			to_other.y = 0.0
-			if to_other.length() > 0.001:
-				_face_direction(to_other.normalized())
-		_play("Point")
-		if meet_timer <= 0.0:
-			meet_cooldown_timer = meet_cooldown
-			meet_target = null
-		move_and_slide()
-		return
+		if _car_is_threat():
+			if _conv_partner != null and is_instance_valid(_conv_partner) \
+					and _conv_partner.has_method("_end_meet"):
+				_conv_partner._end_meet()
+			_end_meet()
+			# Fall through (no return) — normal AI runs below this if-block.
+		else:
+			velocity.x = 0.0
+			velocity.z = 0.0
+
+			if meet_target != null and is_instance_valid(meet_target):
+				var to_other: Vector3 = meet_target.global_position - global_position
+				to_other.y = 0.0
+				if to_other.length() > 0.001:
+					_face_direction(to_other.normalized())
+
+			_play("Point")
+
+			# Conversation playback (both partners run their own copies —
+			# same line list, same line_duration → lockstep without RPC).
+			if not _conv_lines.is_empty():
+				_conv_line_timer -= delta
+				if _conv_line_timer <= 0.0:
+					_conv_index += 1
+					if _conv_index >= _conv_lines.size():
+						_end_meet()
+						move_and_slide()
+						return
+					_conv_line_timer = line_duration
+					_update_subtitle_for_current_line()
+			else:
+				# No conversation — simple meet timer countdown.
+				meet_timer -= delta
+				if meet_timer <= 0.0:
+					_end_meet()
+					move_and_slide()
+					return
+
+			move_and_slide()
+			return
 
 	_decide_state()
 
@@ -137,7 +196,9 @@ func _physics_process(delta: float) -> void:
 
 
 # After move_and_slide, see if any of our slide collisions was another human;
-# if so, both sides will independently start the zawnga reaction.
+# if so, both sides will independently start the meet/conversation. We skip
+# anyone who's already on the ground (FALLEN) — you don't strike up a chat
+# with a person who just got smacked by a flying box.
 func _check_meet_collisions() -> void:
 	if meet_timer > 0.0 or meet_cooldown_timer > 0.0:
 		return
@@ -147,20 +208,176 @@ func _check_meet_collisions() -> void:
 		if other == self or other == null:
 			continue
 		if other is Human or other is GoldenHuman:
+			# Skip if they're already on the ground or already in another
+			# conversation. The second check prevents a third human from
+			# barging in and stealing one of the current talkers.
+			if other.has_method("is_fallen") and other.is_fallen():
+				continue
+			if other.has_method("is_in_meet") and other.is_in_meet():
+				continue
 			_on_meet_other(other as Node3D)
 			return
 
 
+func is_fallen() -> bool:
+	return state == State.FALLEN
+
+
+func is_in_meet() -> bool:
+	return meet_timer > 0.0
+
+
 func _on_meet_other(other: Node3D) -> void:
-	meet_timer = meet_duration
-	meet_target = other
-	# Bypass the normal bubble cooldown — this is a one-off event bubble.
-	var tex: Texture2D = _pick_pool_texture()
-	if tex == null:
+	if meet_timer > 0.0 or meet_cooldown_timer > 0.0:
 		return
-	var BubbleScript: GDScript = load("res://scripts/bubble.gd")
-	BubbleScript.spawn(get_parent(),
-			global_position + meet_bubble_offset, tex, bubble_scale)
+
+	# Initiator selection:
+	#  - Human ↔ Human   : lower instance_id is initiator (deterministic).
+	#  - Human ↔ Golden  : Golden is ALWAYS the initiator. We defer here so
+	#    Golden's _check_meet_collisions on the same / next physics tick
+	#    drives the conversation. This guarantees the cross-language JSON's
+	#    even-indexed lines (Mizo) belong to Golden, odd-indexed (English)
+	#    belong to us.
+	if other is GoldenHuman:
+		return
+	var im_initiator: bool = get_instance_id() < other.get_instance_id()
+	if not im_initiator:
+		return
+
+	var other_gender: String = "female"
+	if "gender" in other:
+		other_gender = String(other.get("gender"))
+
+	# Pick the language pool by who we're meeting:
+	#   Human ↔ Human  -> "english"
+	#   Human ↔ Golden -> "mixed"   (cross-language JSON; falls back to
+	#                                bubble if no "mixed" pool exists yet)
+	var language: String = "mixed" if other is GoldenHuman else "english"
+
+	var lines: Array = []
+	var cm: Node = get_node_or_null("/root/ConversationManager")
+	if cm != null:
+		lines = cm.call("pick_random", gender, other_gender, language)
+
+	# Both sides enter the meet state. If we found a conversation, both
+	# play through it. If not, fall back to the simple meet bubble.
+	_enter_meet(other, true, lines)
+	if other.has_method("_enter_meet"):
+		other._enter_meet(self, false, lines)
+
+
+func _enter_meet(partner: Node3D, is_initiator: bool, lines: Array) -> void:
+	meet_target = partner
+	_conv_partner = partner
+	_conv_is_initiator = is_initiator
+	_conv_lines = lines
+	_conv_index = 0
+	_conv_line_timer = line_duration
+
+	if lines.is_empty():
+		# Simple bubble — no conversation registered for this gender pair.
+		meet_timer = meet_duration
+		var tex: Texture2D = _pick_pool_texture()
+		if tex != null:
+			var BubbleScript: GDScript = load("res://scripts/bubble.gd")
+			BubbleScript.spawn(get_parent(),
+					global_position + meet_bubble_offset, tex, bubble_scale)
+	else:
+		# Conversation drives end-of-meet via line_index reaching the count.
+		# meet_timer just needs to be non-zero so the meet branch runs.
+		meet_timer = INF
+		_update_subtitle_for_current_line()
+
+
+# Show the current line's subtitle on whichever partner is supposed to be
+# speaking it. For mixed-gender conversations the JSON's "speaker" field is
+# the gender of the speaker. For same-gender we alternate by line index —
+# initiator says even-indexed lines, partner says odd-indexed.
+func _update_subtitle_for_current_line() -> void:
+	if _conv_lines.is_empty() or _conv_index >= _conv_lines.size():
+		_hide_subtitle()
+		return
+
+	var line: Dictionary = _conv_lines[_conv_index]
+	var line_speaker: String = String(line.get("speaker", ""))
+
+	var partner_gender: String = "female"
+	if _conv_partner != null and is_instance_valid(_conv_partner) and "gender" in _conv_partner:
+		partner_gender = String(_conv_partner.get("gender"))
+
+	# Normalize the speaker tag in case the JSON has a typo like
+	# "femalefemalefemale" instead of "female" (real bug we hit in the
+	# Mizo files). begins_with works because "female" doesn't share a
+	# prefix with "male".
+	var ls_lower: String = line_speaker.to_lower()
+	var speaker_norm: String = ls_lower
+	if ls_lower.begins_with("female"):
+		speaker_norm = "female"
+	elif ls_lower.begins_with("male"):
+		speaker_norm = "male"
+
+	# In a cross-class meet (Human ↔ Golden) the speaker field can't be
+	# trusted (the Mizo cross-language JSON tags all lines "male"), and
+	# we want lines to alternate Mizo / English by index. Force the same
+	# index-alternation we use for same-gender same-class conversations.
+	var cross_class: bool = _conv_partner is GoldenHuman
+
+	var show_for_me: bool = false
+	if not cross_class and gender != partner_gender:
+		show_for_me = (speaker_norm == gender)
+	else:
+		var even: bool = (_conv_index % 2 == 0)
+		show_for_me = (_conv_is_initiator and even) or (not _conv_is_initiator and not even)
+
+	if show_for_me:
+		_show_subtitle(String(line.get("text", "")))
+	else:
+		_hide_subtitle()
+
+
+func _show_subtitle(text: String) -> void:
+	if subtitle == null:
+		return
+	subtitle.text = text
+	subtitle.modulate = Color(1, 1, 1, 1)
+
+
+func _hide_subtitle() -> void:
+	if subtitle == null:
+		return
+	subtitle.text = ""
+	subtitle.modulate = Color(1, 1, 1, 0)
+
+
+func _end_meet() -> void:
+	_conv_lines = []
+	_conv_index = 0
+	_conv_partner = null
+	_conv_is_initiator = false
+	_hide_subtitle()
+	meet_timer = 0.0
+	meet_cooldown_timer = meet_cooldown
+	meet_target = null
+
+
+# True if the car is close enough AND moving fast enough to break us out
+# of an ongoing conversation. Uses conversation_break_distance (tighter
+# than flee_distance) so the chat keeps going while the car drives PAST
+# at moderate range; only a near-miss / direct approach interrupts.
+# After this returns true, _decide_state() in the same physics tick will
+# flip the state to FLEE since dist < flee_distance is implied (assuming
+# conversation_break_distance < flee_distance, which is the normal case).
+func _car_is_threat() -> bool:
+	if car == null:
+		return false
+	var to_car: Vector3 = car.global_position - global_position
+	to_car.y = 0.0
+	if to_car.length() >= conversation_break_distance:
+		return false
+	var car_speed: float = 0.0
+	if "speed" in car:
+		car_speed = absf(car.get("speed"))
+	return car_speed > car_idle_speed_threshold
 
 
 # ---------- State decision ----------
@@ -218,7 +435,7 @@ func _do_point() -> void:
 	if to_car.length() > 0.001:
 		_face_direction(to_car.normalized())
 	_play("Point")
-	_spawn_bubble_from_pool(point_bubble_offset)
+	_spawn_bubble_from_pool(point_bubble_offset, point_bubble_name)
 
 
 func _do_wander(delta: float) -> void:
@@ -302,7 +519,10 @@ func _on_hit_area_body_entered(body: Node) -> void:
 
 func _fall() -> void:
 	state = State.FALLEN
-	# Cancel any in-progress meet so the fallen pose isn't fighting with Point
-	meet_timer = 0.0
-	meet_target = null
+	# Cancel any in-progress meet/conversation cleanly on both sides.
+	if not _conv_lines.is_empty():
+		if _conv_partner != null and is_instance_valid(_conv_partner) \
+				and _conv_partner.has_method("_end_meet"):
+			_conv_partner._end_meet()
+	_end_meet()
 	_play("Fall")
