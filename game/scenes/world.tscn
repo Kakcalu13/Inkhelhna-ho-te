@@ -1,4 +1,4 @@
-[gd_scene load_steps=17 format=3 uid="uid://b8wvxa3cyvnkj"]
+[gd_scene load_steps=18 format=3 uid="uid://b8wvxa3cyvnkj"]
 
 [ext_resource type="Script" path="res://scripts/car_controller.gd" id="1_car"]
 [ext_resource type="PackedScene" uid="uid://82yictoxgupa" path="res://assets/vehicles/car.glb" id="2_glb"]
@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" uid="uid://b8whuman0001" path="res://scenes/human.tscn" id="5_human"]
 [ext_resource type="PackedScene" uid="uid://sxrdvxp8c841" path="res://scenes/golden_human.tscn" id="6_golden"]
 [ext_resource type="Texture2D" uid="uid://h56cj80vald0" path="res://assets/controller.png" id="7_controller"]
+[ext_resource type="Script" path="res://scripts/humans_spawner.gd" id="8_humans"]
 
 [sub_resource type="ProceduralSkyMaterial" id="Sky_Mat"]
 sky_top_color = Color(0.36, 0.55, 0.85, 1)
@@ -103,12 +104,14 @@ fov = 65.0
 script = ExtResource("4_boxes")
 
 [node name="Humans" type="Node3D" parent="."]
+script = ExtResource("8_humans")
 
 [node name="Human" parent="Humans" instance=ExtResource("5_human")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 0, 0)
 
 [node name="GoldenHuman" parent="Humans" instance=ExtResource("6_golden")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12, 0, 0)
+gender = "male"
 
 [node name="HUD" type="CanvasLayer" parent="."]
 
