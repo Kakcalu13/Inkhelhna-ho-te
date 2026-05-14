@@ -1,0 +1,20 @@
+{
+  "lines": {
+    "1": [
+      { "speaker": "male", "text": "deja vu ang hian i hre ngai em?" },
+      { "speaker": "male", "text": "what?" },
+      { "speaker": "male", "text": "Ka sawi hi i hrethiam em?" },
+      { "speaker": "male", "text": "I don't speak Chinese." },
+      { "speaker": "male", "text": "Engmah a ni lo. I va han tangkailo tak." },
+      { "speaker": "male", "text": "I'm sorry, try google translation." }
+    ],
+    "2": [
+      { "speaker": "male", "text": "He game-ah hian diklo a awm tlat?" },
+      { "speaker": "male", "text": "Huh?" },
+      { "speaker": "male", "text": "Hriatna hi... he khawvel hi a tak a ni lo..." },
+      { "speaker": "male", "text": "I don't understand, I don't speak Korean." },
+      { "speaker": "male", "text": "Simulation-ah hian kan awm em ni ang ka ti?" },
+      { "speaker": "male", "text": "Do you have a google translation?" }
+    ]
+  }
+}
