@@ -30,3 +30,14 @@ shape = SubResource("Hit_Capsule")
 
 [node name="VisibleOnScreenNotifier3D" type="VisibleOnScreenNotifier3D" parent="."]
 aabb = AABB(-0.5, 0, -0.5, 1, 2, 1)
+
+[node name="Subtitle" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.4, 0)
+pixel_size = 0.004
+billboard = 1
+no_depth_test = true
+modulate = Color(1, 1, 1, 0)
+font_size = 45
+outline_size = 6
+autowrap_mode = 3
+width = 600.0
